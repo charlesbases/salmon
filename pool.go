@@ -2,35 +2,44 @@ package salmon
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/panjf2000/ants/v2"
 )
 
 // Pool .
 type Pool struct {
-	pool *ants.Pool
+	pool  *ants.Pool
+	state int32
 
-	f func(v interface{})
+	f func(v interface{}, stop func())
 	w sync.WaitGroup
 }
 
 // Invoke .
-func (p *Pool) Invoke(arg interface{}) {
+func (p *Pool) Invoke(v interface{}) {
 	p.w.Add(1)
 	p.pool.Submit(func() {
-		p.f(arg)
+		if atomic.LoadInt32(&p.state) == opened {
+			p.f(v, p.stop)
+		}
 		p.w.Done()
 	})
 }
 
-// Wait .
+// Wait and Release
 func (p *Pool) Wait() {
 	p.w.Wait()
 	p.pool.Release()
 }
 
+// stop .
+func (p *Pool) stop() {
+	atomic.CompareAndSwapInt32(&p.state, opened, closed)
+}
+
 // NewPool .
-func NewPool(capacity int, fn func(v interface{})) (*Pool, error) {
+func NewPool(capacity int, fn func(v interface{}, stop func())) (*Pool, error) {
 	if pool, err := ants.NewPool(capacity, ants.WithLogger(new(logger))); err != nil {
 		return nil, err
 	} else {

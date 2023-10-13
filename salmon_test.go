@@ -8,8 +8,12 @@ import (
 )
 
 func TestSalmon(t *testing.T) {
-	p, _ := NewPool(10, func(v interface{}) {
-		time.Sleep(time.Duration(rand.Intn(2)+1) * time.Second)
+	p, _ := NewPool(10, func(v interface{}, stop func()) {
+		if i, ok := v.(int); ok && i > 9 {
+			stop()
+			return
+		}
+		time.Sleep(time.Duration(rand.Intn(1)+1) * time.Second)
 		fmt.Println(v)
 	})
 
