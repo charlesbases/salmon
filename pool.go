@@ -18,13 +18,15 @@ type Pool struct {
 
 // Invoke .
 func (p *Pool) Invoke(v interface{}) {
-	p.w.Add(1)
-	p.pool.Submit(func() {
-		if atomic.LoadInt32(&p.state) == opened {
-			p.f(v, p.stop)
-		}
-		p.w.Done()
-	})
+	if atomic.LoadInt32(&p.state) == opened {
+		p.w.Add(1)
+		p.pool.Submit(func() {
+			if atomic.LoadInt32(&p.state) == opened {
+				p.f(v, p.stop)
+			}
+			p.w.Done()
+		})
+	}
 }
 
 // Wait and Release
