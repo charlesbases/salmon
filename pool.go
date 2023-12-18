@@ -41,8 +41,8 @@ func (p *Pool) stop() {
 }
 
 // NewPool .
-func NewPool(capacity int, fn func(v interface{}, stop func())) (*Pool, error) {
-	if pool, err := ants.NewPool(capacity, ants.WithLogger(new(logger))); err != nil {
+func NewPool(concurrent int, fn func(v interface{}, stop func())) (*Pool, error) {
+	if pool, err := ants.NewPool(concurrent, ants.WithLogger(new(logger))); err != nil {
 		return nil, err
 	} else {
 		return &Pool{pool: pool, f: fn}, nil
