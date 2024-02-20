@@ -2,49 +2,90 @@ package salmon
 
 import (
 	"sync"
-	"sync/atomic"
 
 	"github.com/panjf2000/ants/v2"
 )
 
 // Pool .
-type Pool struct {
-	pool  *ants.Pool
-	state int32
-
-	f func(v interface{}, stop func())
-	w sync.WaitGroup
+type Pool interface {
+	// Invoke 往池内提交任务
+	Invoke(v interface{}) error
+	// Stop 停止池内任务，后续任务不运行
+	Stop()
+	// Wait 等待所有任务完成
+	Wait()
 }
 
-// Invoke .
-func (p *Pool) Invoke(v interface{}) {
-	if atomic.LoadInt32(&p.state) == opened {
-		p.w.Add(1)
-		p.pool.Submit(func() {
-			if atomic.LoadInt32(&p.state) == opened {
-				p.f(v, p.stop)
-			}
-			p.w.Done()
-		})
-	}
-}
+var _ Pool = (*pool)(nil)
 
-// Wait and Release
-func (p *Pool) Wait() {
-	p.w.Wait()
-	p.pool.Release()
-}
-
-// stop .
-func (p *Pool) stop() {
-	atomic.CompareAndSwapInt32(&p.state, opened, closed)
+// pool .
+type pool struct {
+	po *ants.Pool
+	wg sync.WaitGroup
 }
 
 // NewPool .
-func NewPool(concurrent int, fn func(v interface{}, stop func())) (*Pool, error) {
-	if pool, err := ants.NewPool(concurrent, ants.WithLogger(new(logger))); err != nil {
-		return nil, err
+func NewPool(size int) (Pool, error) {
+	if p, e := ants.NewPool(size, ants.WithLogger(defaultLogger)); e != nil {
+		return nil, e
 	} else {
-		return &Pool{pool: pool, f: fn}, nil
+		return &pool{po: p}, nil
 	}
+}
+
+// Invoke 往池内提交任务
+func (p *pool) Invoke(v interface{}) error {
+	return p.po.Submit(
+		func() {
+			if fn, ok := v.(func()); ok && !p.po.IsClosed() {
+				p.wg.Add(1)
+				fn()
+				p.wg.Done()
+			}
+		},
+	)
+}
+
+// Stop 停止池内任务，后续任务不运行
+func (p *pool) Stop() {
+	p.po.Release()
+}
+
+// Wait 等待所有任务完成
+func (p *pool) Wait() {
+	p.wg.Wait()
+	p.Stop()
+}
+
+var _ Pool = (*poolWithFunc)(nil)
+
+// poolWithFunc .
+type poolWithFunc struct {
+	po *ants.PoolWithFunc
+	wg sync.WaitGroup
+}
+
+// NewPoolWithFunc .
+func NewPoolWithFunc(size int, fn func(v interface{})) (Pool, error) {
+	if p, e := ants.NewPoolWithFunc(size, fn); e != nil {
+		return nil, e
+	} else {
+		return &poolWithFunc{po: p}, nil
+	}
+}
+
+// Invoke 往池内提交任务
+func (p *poolWithFunc) Invoke(v interface{}) error {
+	return p.po.Invoke(v)
+}
+
+// Stop 停止池内任务，后续任务不运行
+func (p *poolWithFunc) Stop() {
+	p.po.Release()
+}
+
+// Wait 等待所有任务完成
+func (p *poolWithFunc) Wait() {
+	p.wg.Wait()
+	p.Stop()
 }
