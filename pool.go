@@ -15,6 +15,8 @@ type WorkFunc func(cancel func())
 type Pool interface {
 	// Invoke 往池内提交任务
 	Invoke(fn WorkFunc) error
+	// Stop 手动停止任务
+	Stop()
 	// Wait 等待所有任务完成
 	Wait()
 }
@@ -31,7 +33,7 @@ type pool struct {
 
 // NewPool .
 func NewPool(size int) (Pool, error) {
-	if p, e := ants.NewPool(size, ants.WithLogger(defaultLogger)); e != nil {
+	if p, e := ants.NewPool(size, ants.WithLogger(emptyx)); e != nil {
 		return nil, e
 	} else {
 		return &pool{po: p}, nil
@@ -52,19 +54,19 @@ func (p *pool) isClosed() bool {
 	return atomic.LoadInt32(&p.state) == ants.CLOSED
 }
 
-// cancel .
-func (p *pool) cancel() () {
-	atomic.CompareAndSwapInt32(&p.state, ants.OPENED, ants.CLOSED)
-}
-
 // submit .
 func (p *pool) submit(fn WorkFunc) func() {
 	return func() {
 		if !p.isClosed() {
-			fn(p.cancel)
+			fn(p.Stop)
 		}
 		p.wg.Done()
 	}
+}
+
+// Stop 手动停止任务
+func (p *pool) Stop() {
+	atomic.CompareAndSwapInt32(&p.state, ants.OPENED, ants.CLOSED)
 }
 
 // Wait 等待所有任务完成

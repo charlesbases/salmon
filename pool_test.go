@@ -2,6 +2,9 @@ package salmon
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -44,4 +47,37 @@ func TestPool2(t *testing.T) {
 	}
 
 	p.Wait()
+}
+
+func TestPool_Stop(t *testing.T) {
+	p, _ := NewPool(3)
+
+	var notify = make(chan struct{})
+	go func() {
+		var c = make(chan os.Signal)
+		signal.Notify(c, syscall.SIGHUP, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGTERM)
+		for {
+			select {
+			case <-c:
+				p.Stop()
+				fmt.Println("stop")
+				return
+			case <-notify:
+				return
+			}
+		}
+	}()
+
+	for i := 0; i < 100; i++ {
+		var x = i
+		p.Invoke(
+			func(cancel func()) {
+				<-time.After(time.Second)
+				fmt.Println(x, time.Now().Format(time.DateTime))
+			},
+		)
+	}
+
+	p.Wait()
+	close(notify)
 }

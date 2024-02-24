@@ -1,6 +1,6 @@
 package salmon
 
-var defaultLogger = new(logger)
+var emptyx = new(logger)
 
 // logger .
 type logger struct{}
